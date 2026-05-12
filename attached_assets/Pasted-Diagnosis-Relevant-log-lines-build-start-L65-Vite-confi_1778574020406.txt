@@ -1,0 +1,51 @@
+Diagnosis
+
+Relevant log lines: build start [#L65], Vite config load failure [#L69], the thrown error "PORT environment variable is required" [#L71], and pnpm exit status [#L82-L83].
+[#L65]
+[#L69]
+[#L71]
+[#L82-L83]
+The failure is a runtime error thrown while loading artifacts/mockup-sandbox/vite.config.ts during the Vite build: Vite loads the config file and that file requires the PORT environment variable, which is not set in the Netlify build environment. See the config file in your repo: https://github.com/siddhi19-ux/Sana-Dental-Care/blob/main/artifacts/mockup-sandbox/vite.config.ts
+Cause
+
+vite.config.ts expects process.env.PORT to be defined and throws when it is missing. During Netlify's build step the PORT variable is not provided, so Vite fails to load the config and the build exits with code 1.
+Solution You have two ways to fix this. Implement both for robustness:
+
+Option A — Set PORT for Netlify builds (quick)
+
+In the Netlify UI: Site → Site settings → Build & deploy → Environment → Environment variables, add:
+Key: PORT
+Value: 5173 (Or another port your project expects such as 3000. 5173 is Vite’s default.)
+Or commit a netlify.toml to the repo root to set the build environment variable:
+# netlify.toml
+[build.environment]
+PORT = "5173"
+Commit and push, then retry the deploy.
+
+Option B — Make vite.config.ts resilient (recommended) Modify artifacts/mockup-sandbox/vite.config.ts so it does not throw when PORT is missing and provides a sane default. For example:
+
+// artifacts/mockup-sandbox/vite.config.ts
+import { defineConfig } from 'vite';
+
+const port = process.env.PORT ?? '5173'; // fallback if not provided
+
+export default defineConfig({
+  server: {
+    port: Number(port),
+  },
+  // ...rest of config
+});
+Or only require PORT in dev mode and avoid throwing during build:
+
+const mode = process.env.NODE_ENV;
+if (mode === 'development' && !process.env.PORT) {
+  throw new Error('PORT environment variable is required for dev mode');
+}
+Commit and push the change, then retry the Netlify build.
+
+Notes
+
+Confirm the file artifacts/mockup-sandbox/vite.config.ts is committed (the file must be present in your repo) before changing Netlify settings.
+After applying either solution, re-run the build. If you need to change Node version on Netlify, see Netlify docs for changing Node versions: https://docs.netlify.com/configure-builds/manage-dependencies/#node-js-and-javascript
+Fix with agent
+
